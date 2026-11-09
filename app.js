@@ -678,26 +678,38 @@ if ('serviceWorker' in navigator) {
 
 // --- PWA INSTALL PROMPT HANDLING ---
 let deferredPrompt = null;
-const installBtn = $('install-btn');
+const installBtns = document.querySelectorAll('.pwa-install-btn');
 
 window.addEventListener('beforeinstallprompt', e => {
+  // Prevent Chrome's default mini-infobar from appearing on mobile
   e.preventDefault();
+  // Stash the event so it can be triggered later.
   deferredPrompt = e;
-  if (installBtn) installBtn.classList.remove('hidden');
+  // Unhide all install buttons
+  installBtns.forEach(btn => btn.classList.remove('hidden'));
 });
 
-if (installBtn) {
-  installBtn.addEventListener('click', async () => {
+installBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
     if (!deferredPrompt) return;
+    // Show the install prompt
     deferredPrompt.prompt();
+    // Wait for the user to respond
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
-      installBtn.classList.add('hidden');
+      // Hide buttons if they installed it
+      installBtns.forEach(b => b.classList.add('hidden'));
     }
+    // Clear the saved prompt since it can't be used again
     deferredPrompt = null;
   });
-}
+});
 
+window.addEventListener('appinstalled', () => {
+  // Hide buttons once installed
+  installBtns.forEach(b => b.classList.add('hidden'));
+  deferredPrompt = null;
+});
 window.addEventListener('appinstalled', () => {
   if (installBtn) installBtn.classList.add('hidden');
   deferredPrompt = null;
