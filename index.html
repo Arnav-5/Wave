@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wave..</title>
+    
+    <!-- PWA Meta tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1c1d21">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- AUTH SCREEN -->
+    <section id="auth-screen" class="screen hidden">
+        <h2>Join the Chat</h2>
+        <form id="auth-form" novalidate>
+            <input id="username" type="text" placeholder="Username" autocomplete="username" maxlength="20">
+            <input id="password" type="password" placeholder="Password" autocomplete="current-password" maxlength="72">
+            <button type="submit" id="login-btn" class="full">Log in</button>
+            <button type="button" id="signup-btn" class="full secondary">Create account</button>
+        </form>
+        <p id="auth-error" class="error"></p>
+    </section>
+
+    <!-- CONTACTS SCREEN -->
+    <section id="contacts-screen" class="screen hidden">
+        <header class="header">
+            <div class="head-text">
+                <strong>Chats</strong>
+                <small id="me-name"></small>
+            </div>
+            <!-- Dynamic PWA Install Button -->
+            <button type="button" id="install-btn" class="install-btn hidden">Install App</button>
+            <button type="button" class="ghost" id="logout-btn">Log out</button>
+        </header>
+        <div class="search-wrap">
+            <input id="user-search" type="search" placeholder="Search people" autocomplete="off">
+        </div>
+        <div id="contacts-list"></div>
+    </section>
+
+    <!-- CHAT SCREEN -->
+    <section id="chat-screen" class="screen hidden">
+        <header class="header">
+            <button type="button" class="ghost" id="back-btn">‹ Back</button>
+            <div id="chat-title" class="header-title"></div>
+            <div class="spacer"></div>
+        </header>
+        <div id="messages"></div>
+
+        <!-- Shown when a file has been chosen but not sent yet -->
+        <div id="pending" class="pending hidden">
+            <span id="pending-name"></span>
+            <button type="button" class="ghost" id="pending-clear" aria-label="Remove file">✕</button>
+        </div>
+
+        <form id="chat-form" class="composer" autocomplete="off">
+            <button type="button" class="attach" id="attach-btn" aria-label="Attach file">📎</button>
+            <input id="file-input" type="file" hidden
+                   accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
+            <input id="message-input" type="text" placeholder="Message" maxlength="1000">
+            <button type="submit" id="send-btn">Send</button>
+        </form>
+    </section>
+
+    <!-- Notification Sound -->
+    <audio id="notif-sound" src="notify.mp3" preload="auto"></audio>
+    <div id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
