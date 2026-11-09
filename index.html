@@ -20,6 +20,10 @@
     <!-- AUTH SCREEN -->
     <section id="auth-screen" class="screen hidden">
         <h2>Join the Chat</h2>
+        
+        <!-- NEW: Install Button for the login page -->
+        <button type="button" class="install-btn pwa-install-btn hidden" style="width: 100%; margin-bottom: 16px; background: #22c55e;">Install App</button>
+
         <form id="auth-form" novalidate>
             <input id="username" type="text" placeholder="Username" autocomplete="username" maxlength="20">
             <input id="password" type="password" placeholder="Password" autocomplete="current-password" maxlength="72">
@@ -36,8 +40,8 @@
                 <strong>Chats</strong>
                 <small id="me-name"></small>
             </div>
-            <!-- Dynamic PWA Install Button -->
-            <button type="button" id="install-btn" class="install-btn hidden">Install App</button>
+            <!-- UPDATED: Added pwa-install-btn class -->
+            <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
             <button type="button" class="ghost" id="logout-btn">Log out</button>
         </header>
         <div class="search-wrap">
