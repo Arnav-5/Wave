@@ -17,11 +17,13 @@
 </head>
 <body>
 
-    <!-- AUTH SCREEN -->
+   
+
+   
+   <!-- AUTH SCREEN -->
     <section id="auth-screen" class="screen hidden">
         <h2>Join the Chat</h2>
-        
-        <!-- NEW: Install Button for the login page -->
+        <!-- Install Button for Auth Screen -->
         <button type="button" class="install-btn pwa-install-btn hidden" style="width: 100%; margin-bottom: 16px; background: #22c55e;">Install App</button>
 
         <form id="auth-form" novalidate>
@@ -40,7 +42,7 @@
                 <strong>Chats</strong>
                 <small id="me-name"></small>
             </div>
-            <!-- UPDATED: Added pwa-install-btn class -->
+            <!-- Install Button for Contacts Screen -->
             <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
             <button type="button" class="ghost" id="logout-btn">Log out</button>
         </header>
@@ -55,11 +57,11 @@
         <header class="header">
             <button type="button" class="ghost" id="back-btn">‹ Back</button>
             <div id="chat-title" class="header-title"></div>
-            <div class="spacer"></div>
+            <!-- Install Button for Chat Interface -->
+            <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
         </header>
         <div id="messages"></div>
 
-        <!-- Shown when a file has been chosen but not sent yet -->
         <div id="pending" class="pending hidden">
             <span id="pending-name"></span>
             <button type="button" class="ghost" id="pending-clear" aria-label="Remove file">✕</button>
