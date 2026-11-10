@@ -354,3 +354,61 @@ button.attach:hover { background: #33343a; }
   text-overflow: ellipsis;
 }
 .file-size { font-size: 11px; opacity: 0.7; }
+
+/* ============================================================
+   ADDITIONS: append to the end of your existing style.css
+   ============================================================ */
+
+.boot {
+  margin: auto;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
+  padding: 24px;
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.install-full {
+  width: 100%;
+  margin: 0 0 16px;
+  background: var(--online);
+  color: #fff;
+}
+.install-full:hover { background: #1ea34e; }
+
+.hint {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.offline {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  background: #7a4a00;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  z-index: 20;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Keep content clear of the notch and home indicator on installed phone apps */
+@media (max-width: 480px) {
+  .screen {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
