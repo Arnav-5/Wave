@@ -412,3 +412,36 @@ button.small {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
+/* ---------- Install guide ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.modal-card h3 { margin: 0 0 8px; font-size: 18px; }
+#install-intro {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.steps li { margin-bottom: 6px; }
