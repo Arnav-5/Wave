@@ -1,10 +1,16 @@
 // =====================================================================
-//  SIMPLE CHAT - app.js
+//  WAVE CHAT - app.js
 // =====================================================================
 
 // ---------- 1. SETUP ----------
 const SUPABASE_URL = 'https://tjzjgspoufiklfmeeakn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NFLiqvcxlRXLMmvXHxw8Aw_XA49khDj';
+
+if (!window.supabase?.createClient) {
+  document.getElementById('boot').textContent =
+    'Could not load the chat library. Check your connection and refresh the page.';
+  throw new Error('Supabase library failed to load');
+}
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const TOKEN_KEY = 'simplechat_token';
@@ -15,10 +21,10 @@ const MIN_PASSWORD_LENGTH = 6;
 const BUCKET = 'chat-files';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-// Must match the allowed types set in the SQL for the bucket
+// Must match the allowed MIME types configured for the bucket
 const ALLOWED_TYPE_RE = /^(image\/(jpeg|png|gif|webp)|video\/(mp4|webm|quicktime)|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/vnd\.ms-(excel|powerpoint)|text\/plain)$/;
 
-// Fallback when the browser doesn't report a file type
+// Fallback when the browser doesn't report a usable file type
 const EXT_TYPES = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
   mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -30,6 +36,11 @@ const EXT_TYPES = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   txt: 'text/plain',
 };
+
+const ICON_URL = new URL('icon-192.png', document.baseURI).href;
+const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const IS_STANDALONE =
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 const state = {
   token: null,         // session token (proves who you are to the server)
@@ -44,8 +55,9 @@ const state = {
   pendingFile: null,   // file chosen but not yet sent: { file, type }
 };
 
-let listSeq = 0;       // ignores out-of-date contact list results
+let listSeq = 0;        // ignores out-of-date contact list results
 let searchTimer = null;
+let pendingChat = null; // chat to open after sign-in (set by a notification click)
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -98,6 +110,11 @@ function showScreen(name) {
   ['auth', 'contacts', 'chat'].forEach(s => $(`${s}-screen`).classList.toggle('hidden', s !== name));
 }
 
+function showAuth() {
+  showScreen('auth');
+  $('ios-hint').classList.toggle('hidden', !(IS_IOS && !IS_STANDALONE));
+}
+
 function storeSession(token, username) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, username);
@@ -106,6 +123,10 @@ function storeSession(token, username) {
 function clearStoredSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+}
+
+function validUsername(value) {
+  return typeof value === 'string' && USERNAME_RE.test(value) ? value : null;
 }
 
 // A stable colour per username, for avatars
@@ -158,38 +179,76 @@ function scrollToBottom() {
   box.scrollTop = box.scrollHeight;
 }
 
-// -- PWA & Notification Helpers --
-function playNotifSound() {
-  const audio = $('notif-sound');
-  if (audio) {
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-  }
+function updateOnlineStatus() {
+  $('offline').classList.toggle('hidden', navigator.onLine);
 }
 
-async function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    await Notification.requestPermission();
+// ---------- 2b. NOTIFICATIONS ----------
+
+const notifSupported = () =>
+  window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator;
+
+function playNotifSound() {
+  const audio = $('notif-sound');
+  if (!audio) return;
+  audio.currentTime = 0;
+  audio.play().catch(() => {}); // browsers may block sound until the user has interacted
+}
+
+// Shows the right state of the "Enable alerts" button
+function updateNotifButton() {
+  const btn = $('notif-btn');
+  if (!notifSupported()) {
+    btn.textContent = IS_IOS ? 'Add to Home Screen for alerts' : 'Alerts not supported';
+    btn.disabled = true;
+    btn.classList.remove('hidden');
+    return;
   }
+  const perm = Notification.permission;
+  btn.textContent = perm === 'denied' ? 'Alerts blocked' : 'Enable alerts';
+  btn.disabled = perm === 'denied';
+  btn.classList.toggle('hidden', perm === 'granted');
+}
+
+// Must be called from a user tap (the button), or browsers ignore it
+async function requestNotificationPermission() {
+  if (!notifSupported()) {
+    toast(IS_IOS ? 'On iPhone, add Wave to your Home Screen first.'
+                 : 'Notifications are not supported in this browser.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    toast('Notifications are blocked. Allow them in your browser settings.');
+    return;
+  }
+  if (Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission();
+    } catch (err) {
+      console.error('Permission request failed:', err);
+    }
+  }
+  updateNotifButton();
+  if (Notification.permission === 'granted') toast('Alerts are on.');
 }
 
 async function sendSystemNotification(sender, messageText) {
   playNotifSound();
-  
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      // Use .ready to ensure it works even on first load
-      const reg = await navigator.serviceWorker.ready;
-      reg.showNotification(`New message from ${sender}`, {
-        body: messageText || 'Sent an attachment',
-        icon: 'icon-192.png',
-        badge: 'icon-192.png',
-        vibrate: [200, 100, 200],
-        data: { url: './' }
-      });
-    } catch (err) {
-      console.error('Notification error:', err);
-    }
+  if (!notifSupported() || Notification.permission !== 'granted') return;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification(`New message from ${sender}`, {
+      body: messageText ? messageText.slice(0, 120) : 'Open Wave to read it',
+      icon: ICON_URL,
+      badge: ICON_URL,
+      tag: `chat-${sender}`, // one notification per chat, updated in place
+      renotify: true,        // still alert when the notification is updated
+      vibrate: [200, 100, 200],
+      data: { sender },
+    });
+  } catch (err) {
+    console.error('Notification error:', err);
   }
 }
 
@@ -230,32 +289,47 @@ async function authenticate(isSignUp) {
 async function logOut() {
   const token = state.token;
   forceLogout();
-  if (token) await db.rpc('log_out', { p_token: token }); // invalidate on the server
+  if (token) {
+    try {
+      await db.rpc('log_out', { p_token: token }); // invalidate on the server
+    } catch (err) {
+      console.error('Log out failed on server:', err);
+    }
+  }
 }
 
 // Clears everything and returns to the login screen
 function forceLogout(message = '') {
   disconnectInbox();
   clearStoredSession();
-  state.token = null;
-  state.me = null;
-  state.chatWith = null;
-  state.lastId = 0;
-  state.seenIds = new Set();
-  state.lastDay = null;
-  state.unread = new Set();
-  state.sending = false;
+  Object.assign(state, {
+    token: null,
+    me: null,
+    chatWith: null,
+    lastId: 0,
+    seenIds: new Set(),
+    lastDay: null,
+    unread: new Set(),
+    sending: false,
+  });
   clearPending();
   $('messages').innerHTML = '';
   $('contacts-list').innerHTML = '';
   $('user-search').value = '';
   $('password').value = '';
+  $('me-name').textContent = '';
   setAuthError(message);
-  showScreen('auth');
+  showAuth();
 }
 
-// Runs on page load: if a session was saved, go straight in
+// Runs on page load: go straight in if a session was saved
 function restoreSession() {
+  const params = new URLSearchParams(location.search);
+  pendingChat = validUsername(params.get('chat'));
+  if (params.has('chat')) history.replaceState(null, '', location.pathname);
+
+  $('boot').remove();
+
   const token = localStorage.getItem(TOKEN_KEY);
   const username = localStorage.getItem(USER_KEY);
   if (token && username) {
@@ -263,16 +337,23 @@ function restoreSession() {
     state.me = username;
     enterApp();
   } else {
-    showScreen('auth');
+    showAuth();
   }
 }
 
 function enterApp() {
   $('me-name').textContent = `Signed in as ${state.me}`;
   showScreen('contacts');
+  updateNotifButton();
   connectInbox();
   syncAll();
-  requestNotificationPermission(); // Request notification access
+
+  // Opening a chat from a notification, once signed in
+  if (pendingChat) {
+    const who = pendingChat;
+    pendingChat = null;
+    openChat(who);
+  }
 }
 
 // ---------- 4. CONTACTS ----------
@@ -291,13 +372,13 @@ async function loadContacts() {
   ]);
   if (seq !== listSeq) return; // a newer load has started, so this one is stale
 
-  state.unread = new Set(unreadRows.map(r => r.contact_name));
+  state.unread = new Set((unreadRows ?? []).map(r => r.contact_name));
   if (state.chatWith) state.unread.delete(state.chatWith); // the open chat is already seen
 
   const list = $('contacts-list');
   list.innerHTML = '';
 
-  if (rows.length === 0) {
+  if (!rows?.length) {
     const empty = document.createElement('p');
     empty.className = 'empty';
     if (query) {
@@ -341,17 +422,6 @@ function buildContact(row) {
   }
 
   btn.append(avatar, label, meta);
-  
-  // FIX: Request permission only when the user physically taps a contact
-  btn.addEventListener('click', () => {
-    requestNotificationPermission();
-    openChat(name);
-  });
-  
-  return btn;
-}
-
-  btn.append(avatar, label, meta);
   btn.addEventListener('click', () => openChat(name));
   return btn;
 }
@@ -392,11 +462,13 @@ async function loadMessages() {
   const withUser = state.chatWith;
   if (!withUser) return;
 
-  const rows = await rpc('get_messages', {
-    p_token: state.token,
-    p_with: withUser,
-    p_after: state.lastId,
-  });
+  const rows =
+    (await rpc('get_messages', {
+      p_token: state.token,
+      p_with: withUser,
+      p_after: state.lastId,
+    })) ?? [];
+
   if (state.chatWith !== withUser) return; // user switched chats while loading
   if (rows.length === 0) return;
 
@@ -405,8 +477,7 @@ async function loadMessages() {
   if (stick) scrollToBottom();
 
   // Everything now on screen counts as seen
-  const readUpTo = state.lastId;
-  await rpc('mark_read', { p_token: state.token, p_with: withUser, p_id: readUpTo });
+  await rpc('mark_read', { p_token: state.token, p_with: withUser, p_id: state.lastId });
   state.unread.delete(withUser);
 }
 
@@ -529,11 +600,13 @@ function buildAttachment(msg) {
   return card;
 }
 
-// Works out the file type, from the browser or from the extension
+// Works out the file type: the browser's type first, then the extension
 function detectType(file) {
   const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-  const type = file.type || EXT_TYPES[ext] || '';
-  return ALLOWED_TYPE_RE.test(type) ? type : null;
+  for (const candidate of [file.type, EXT_TYPES[ext]]) {
+    if (candidate && ALLOWED_TYPE_RE.test(candidate)) return candidate;
+  }
+  return null;
 }
 
 function onFileChosen() {
@@ -592,31 +665,40 @@ async function sendMessage(event) {
   state.sending = true;
   setSendBusy(true);
   input.value = '';
-  let sent = false;
+  let uploaded = null;
+
   try {
-    const attachment = pending ? await uploadFile(pending) : {};
+    uploaded = pending ? await uploadFile(pending) : null;
 
     await rpc('send_message', {
       p_token: state.token,
       p_to: to,
       p_content: text || null,
-      p_path: attachment.path ?? null,
-      p_name: attachment.name ?? null,
-      p_type: attachment.type ?? null,
-      p_size: attachment.size ?? null,
+      p_path: uploaded?.path ?? null,
+      p_name: uploaded?.name ?? null,
+      p_type: uploaded?.type ?? null,
+      p_size: uploaded?.size ?? null,
     });
-    sent = true;
+    uploaded = null; // the file now belongs to a saved message
     clearPending();
-    await loadMessages();
-    scrollToBottom();
   } catch (err) {
-    if (!sent && !input.value) input.value = text; // give the text back so nothing is lost
+    if (!input.value) input.value = text; // give the text back so nothing is lost
+    if (uploaded) {
+      // The file was uploaded but the message wasn't saved: remove the orphan
+      db.storage.from(BUCKET).remove([uploaded.path]).catch(() => {});
+    }
     handleError(err);
+    return;
   } finally {
     state.sending = false;
     setSendBusy(false);
     input.focus();
   }
+
+  // Refresh after the send succeeded, outside the try so a display issue
+  // doesn't look like a failed send
+  await loadMessages().catch(handleError);
+  scrollToBottom();
 }
 
 // ---------- 8. REALTIME ----------
@@ -628,10 +710,13 @@ function connectInbox() {
   disconnectInbox();
   const channel = db.channel(`inbox:${state.me}`);
   channel
-    .on('broadcast', { event: 'new_message' }, payload => onNewMessageSignal(payload))
+    .on('broadcast', { event: 'new_message' }, signal => onNewMessageSignal(signal))
     .subscribe(status => {
       // Runs on every (re)connect, so anything missed while offline gets loaded
       if (status === 'SUBSCRIBED') syncAll();
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn('Realtime connection problem:', status);
+      }
     });
   state.inbox = channel;
 }
@@ -645,28 +730,48 @@ function disconnectInbox() {
 
 async function onNewMessageSignal(signal) {
   const data = signal?.payload ?? signal;
-  if (!data?.sender || !data?.receiver) return;
+  if (!data?.sender || !data?.receiver || !state.me) return;
 
   const other = data.sender === state.me ? data.receiver : data.sender;
+  const incoming = data.receiver === state.me && data.sender !== state.me;
 
-  // If the message is for me, and (I am not looking at the chat OR the app is in the background)
-  if (data.receiver === state.me) {
-    if (other !== state.chatWith || document.hidden) {
+  // Alert only when the message is for me and I'm not already reading that chat
+  if (incoming) {
+    const viewing = other === state.chatWith && !document.hidden;
+    if (!viewing) {
       toast(`New message from ${other}`);
-      sendSystemNotification(other, data.content || 'New message');
+      sendSystemNotification(other, data.content);
     }
   }
 
-  // Load the message onto the screen if we are looking at this chat
+  // Show the message on screen if this chat is open
   if (other === state.chatWith) {
-    await sleep(150); 
-    await loadMessages().catch(handleError); 
+    await sleep(150); // give the database a moment to commit before reading
+    await loadMessages().catch(handleError);
   }
-  
+
   loadContacts().catch(handleError);
 }
 
-// ---------- 9. EVENTS, START & PWA ----------
+// Refreshes everything that may have changed while the app was idle or offline
+async function syncAll() {
+  if (!state.token) return;
+  try {
+    await loadContacts();
+    if (state.chatWith) await loadMessages();
+  } catch (err) {
+    handleError(err);
+  }
+}
+
+// Opens the chat a notification pointed to (called from the service worker)
+function openFromNotification(sender) {
+  const who = validUsername(sender);
+  if (!who || !state.token) return;
+  if (who !== state.chatWith) openChat(who);
+}
+
+// ---------- 9. EVENTS & START ----------
 
 $('auth-form').addEventListener('submit', e => {
   e.preventDefault();
@@ -674,6 +779,7 @@ $('auth-form').addEventListener('submit', e => {
 });
 $('signup-btn').addEventListener('click', () => authenticate(true));
 $('logout-btn').addEventListener('click', logOut);
+$('notif-btn').addEventListener('click', requestNotificationPermission);
 $('user-search').addEventListener('input', onSearchInput);
 $('back-btn').addEventListener('click', closeChat);
 $('chat-form').addEventListener('submit', sendMessage);
@@ -683,29 +789,39 @@ $('pending-clear').addEventListener('click', clearPending);
 
 // When you come back to the tab, catch up on anything missed
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && state.token) syncAll();
+  if (!document.hidden) syncAll();
 });
 
-restoreSession();
+window.addEventListener('online', () => {
+  updateOnlineStatus();
+  syncAll();
+});
+window.addEventListener('offline', updateOnlineStatus);
 
-// --- PWA SERVICE WORKER REGISTRATION ---
+// --- SERVICE WORKER ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => {
-      console.error('ServiceWorker registration failed: ', err);
-    });
+    navigator.serviceWorker
+      .register('./sw.js')
+      .catch(err => console.error('ServiceWorker registration failed:', err));
+  });
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type === 'OPEN_CHAT') openFromNotification(event.data.sender);
   });
 }
 
-// --- PWA INSTALL PROMPT HANDLING ---
+// --- PWA INSTALL PROMPT ---
 let deferredPrompt = null;
 const installBtns = document.querySelectorAll('.pwa-install-btn');
+
+function hideInstallButtons() {
+  installBtns.forEach(b => b.classList.add('hidden'));
+}
 
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
-  // Unhide all install buttons on all screens
-  installBtns.forEach(btn => btn.classList.remove('hidden'));
+  installBtns.forEach(b => b.classList.remove('hidden'));
 });
 
 installBtns.forEach(btn => {
@@ -713,15 +829,18 @@ installBtns.forEach(btn => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      // Hide all buttons across all screens once installed
-      installBtns.forEach(b => b.classList.add('hidden'));
-    }
+    if (outcome === 'accepted') hideInstallButtons();
     deferredPrompt = null;
   });
 });
 
 window.addEventListener('appinstalled', () => {
-  installBtns.forEach(b => b.classList.add('hidden'));
+  hideInstallButtons();
   deferredPrompt = null;
 });
+
+if (IS_STANDALONE) hideInstallButtons(); // already installed
+
+// --- START ---
+updateOnlineStatus();
+restoreSession();
