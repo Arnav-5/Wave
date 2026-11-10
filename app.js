@@ -16,15 +16,16 @@ const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const TOKEN_KEY = 'simplechat_token';
 const USER_KEY = 'simplechat_user';
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 
 const BUCKET = 'chat-files';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-// Must match the allowed MIME types configured for the bucket
+// Must match the MIME types allowed for the bucket in the SQL
 const ALLOWED_TYPE_RE = /^(image\/(jpeg|png|gif|webp)|video\/(mp4|webm|quicktime)|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/vnd\.ms-(excel|powerpoint)|text\/plain)$/;
 
-// Fallback when the browser doesn't report a usable file type
+// Used when the browser doesn't report a usable file type
 const EXT_TYPES = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
   mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -37,7 +38,6 @@ const EXT_TYPES = {
   txt: 'text/plain',
 };
 
-const ICON_URL = new URL('icon-192.png', document.baseURI).href;
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const IS_STANDALONE =
   window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -57,7 +57,9 @@ const state = {
 
 let listSeq = 0;        // ignores out-of-date contact list results
 let searchTimer = null;
-let pendingChat = null; // chat to open after sign-in (set by a notification click)
+let pendingChat = null; // chat to open after sign-in (set when opened from an email link)
+let toastTimer = null;
+let deferredPrompt = null; // browser install prompt, when the browser offers one
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -66,7 +68,7 @@ class SessionExpiredError extends Error {}
 
 // ---------- 2. HELPERS ----------
 
-// Every database call goes through here so errors are handled one way.
+// Every database call goes through here so errors are handled one way
 async function rpc(fn, params) {
   const { data, error } = await db.rpc(fn, params);
   if (error) {
@@ -78,11 +80,12 @@ async function rpc(fn, params) {
 }
 
 function handleError(err) {
-  if (err instanceof SessionExpiredError) return forceLogout('Your session has expired. Please log in again.');
+  if (err instanceof SessionExpiredError) {
+    return forceLogout('Your session has expired. Please log in again.');
+  }
   toast(err.message);
 }
 
-let toastTimer;
 function toast(message) {
   const el = $('toast');
   el.textContent = message;
@@ -183,10 +186,9 @@ function updateOnlineStatus() {
   $('offline').classList.toggle('hidden', navigator.onLine);
 }
 
-// ---------- 2b. NOTIFICATIONS ----------
-
-const notifSupported = () =>
-  window.isSecureContext && 'Notification' in window && 'serviceWorker' in navigator;
+// ---------- 2b. ALERTS ----------
+// While Wave is open: a sound and an on-screen toast.
+// While Wave is closed: an email, sent by the server (see the Edge Function).
 
 function playNotifSound() {
   const audio = $('notif-sound');
@@ -195,60 +197,45 @@ function playNotifSound() {
   audio.play().catch(() => {}); // browsers may block sound until the user has interacted
 }
 
-// Shows the right state of the "Enable alerts" button
-function updateNotifButton() {
-  const btn = $('notif-btn');
-  if (!notifSupported()) {
-    btn.textContent = IS_IOS ? 'Add to Home Screen for alerts' : 'Alerts not supported';
-    btn.disabled = true;
-    btn.classList.remove('hidden');
-    return;
-  }
-  const perm = Notification.permission;
-  btn.textContent = perm === 'denied' ? 'Alerts blocked' : 'Enable alerts';
-  btn.disabled = perm === 'denied';
-  btn.classList.toggle('hidden', perm === 'granted');
-}
+// ---------- 2c. EMAIL ALERTS SETTINGS ----------
 
-// Must be called from a user tap (the button), or browsers ignore it
-async function requestNotificationPermission() {
-  if (!notifSupported()) {
-    toast(IS_IOS ? 'On iPhone, add Wave to your Home Screen first.'
-                 : 'Notifications are not supported in this browser.');
-    return;
-  }
-  if (Notification.permission === 'denied') {
-    toast('Notifications are blocked. Allow them in your browser settings.');
-    return;
-  }
-  if (Notification.permission === 'default') {
-    try {
-      await Notification.requestPermission();
-    } catch (err) {
-      console.error('Permission request failed:', err);
-    }
-  }
-  updateNotifButton();
-  if (Notification.permission === 'granted') toast('Alerts are on.');
-}
-
-async function sendSystemNotification(sender, messageText) {
-  playNotifSound();
-  if (!notifSupported() || Notification.permission !== 'granted') return;
-
+async function openEmailSettings() {
+  const input = $('email-input');
+  input.value = '';
+  $('email-error').textContent = '';
+  $('email-modal').classList.remove('hidden');
   try {
-    const reg = await navigator.serviceWorker.ready;
-    await reg.showNotification(`New message from ${sender}`, {
-      body: messageText ? messageText.slice(0, 120) : 'Open Wave to read it',
-      icon: ICON_URL,
-      badge: ICON_URL,
-      tag: `chat-${sender}`, // one notification per chat, updated in place
-      renotify: true,        // still alert when the notification is updated
-      vibrate: [200, 100, 200],
-      data: { sender },
-    });
+    input.value = (await rpc('get_notify_email', { p_token: state.token })) ?? '';
   } catch (err) {
-    console.error('Notification error:', err);
+    handleError(err);
+  }
+  input.focus();
+}
+
+function closeEmailSettings() {
+  $('email-modal').classList.add('hidden');
+}
+
+async function saveEmailSettings(event) {
+  event.preventDefault();
+  const email = $('email-input').value.trim().toLowerCase();
+  if (email && !EMAIL_RE.test(email)) {
+    $('email-error').textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  const btn = $('email-save');
+  btn.disabled = true;
+  $('email-error').textContent = '';
+  try {
+    await rpc('set_notify_email', { p_token: state.token, p_email: email });
+    closeEmailSettings();
+    toast(email ? 'Email alerts are on.' : 'Email alerts are off.');
+  } catch (err) {
+    if (err instanceof SessionExpiredError) return handleError(err);
+    $('email-error').textContent = err.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -291,7 +278,7 @@ async function logOut() {
   forceLogout();
   if (token) {
     try {
-      await db.rpc('log_out', { p_token: token }); // invalidate on the server
+      await db.rpc('log_out', { p_token: token }); // end the session on the server
     } catch (err) {
       console.error('Log out failed on server:', err);
     }
@@ -313,16 +300,19 @@ function forceLogout(message = '') {
     sending: false,
   });
   clearPending();
+  closeEmailSettings();
   $('messages').innerHTML = '';
   $('contacts-list').innerHTML = '';
   $('user-search').value = '';
   $('password').value = '';
+  $('email-input').value = '';
   $('me-name').textContent = '';
   setAuthError(message);
   showAuth();
 }
 
-// Runs on page load: go straight in if a session was saved
+// Runs on page load. Goes straight in if a session was saved, and opens
+// a chat if the page was opened from an email link (?chat=name).
 function restoreSession() {
   const params = new URLSearchParams(location.search);
   pendingChat = validUsername(params.get('chat'));
@@ -344,11 +334,9 @@ function restoreSession() {
 function enterApp() {
   $('me-name').textContent = `Signed in as ${state.me}`;
   showScreen('contacts');
-  updateNotifButton();
   connectInbox();
   syncAll();
 
-  // Opening a chat from a notification, once signed in
   if (pendingChat) {
     const who = pendingChat;
     pendingChat = null;
@@ -457,7 +445,7 @@ function closeChat() {
   loadContacts().catch(handleError);
 }
 
-// Fetches only the messages that aren't on screen yet, then marks them as seen
+// Fetches only the messages not yet on screen, then marks them as seen
 async function loadMessages() {
   const withUser = state.chatWith;
   if (!withUser) return;
@@ -500,7 +488,7 @@ function renderMessage(msg) {
   const mine = msg.sender === state.me;
 
   const row = document.createElement('div');
-  row.className = `msg ${mine ? 'mine' : 'theirs'}`; // mine = right, theirs = left
+  row.className = `msg ${mine ? 'mine' : 'theirs'}`;
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
@@ -684,7 +672,7 @@ async function sendMessage(event) {
   } catch (err) {
     if (!input.value) input.value = text; // give the text back so nothing is lost
     if (uploaded) {
-      // The file was uploaded but the message wasn't saved: remove the orphan
+      // The file uploaded but the message wasn't saved: remove the orphan
       db.storage.from(BUCKET).remove([uploaded.path]).catch(() => {});
     }
     handleError(err);
@@ -695,7 +683,7 @@ async function sendMessage(event) {
     input.focus();
   }
 
-  // Refresh after the send succeeded, outside the try so a display issue
+  // Refresh after a successful send, outside the try so a display problem
   // doesn't look like a failed send
   await loadMessages().catch(handleError);
   scrollToBottom();
@@ -703,7 +691,7 @@ async function sendMessage(event) {
 
 // ---------- 8. REALTIME ----------
 // Each user listens on their own inbox channel. The database pings it when a
-// message involves them. The ping carries ids and usernames only; the message
+// message involves them. The ping holds ids and usernames only; the message
 // text is fetched with a logged-in request.
 
 function connectInbox() {
@@ -712,7 +700,7 @@ function connectInbox() {
   channel
     .on('broadcast', { event: 'new_message' }, signal => onNewMessageSignal(signal))
     .subscribe(status => {
-      // Runs on every (re)connect, so anything missed while offline gets loaded
+      // Runs on every (re)connect, so anything missed while offline is loaded
       if (status === 'SUBSCRIBED') syncAll();
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         console.warn('Realtime connection problem:', status);
@@ -734,19 +722,15 @@ async function onNewMessageSignal(signal) {
 
   const other = data.sender === state.me ? data.receiver : data.sender;
   const incoming = data.receiver === state.me && data.sender !== state.me;
+  const viewing = other === state.chatWith && !document.hidden;
 
-  // Alert only when the message is for me and I'm not already reading that chat
-  if (incoming) {
-    const viewing = other === state.chatWith && !document.hidden;
-    if (!viewing) {
-      toast(`New message from ${other}`);
-      sendSystemNotification(other, data.content);
-    }
+  if (incoming && !viewing) {
+    toast(`New message from ${other}`);
+    playNotifSound();
   }
 
-  // Show the message on screen if this chat is open
   if (other === state.chatWith) {
-    await sleep(150); // give the database a moment to commit before reading
+    await sleep(150); // give the database a moment to commit
     await loadMessages().catch(handleError);
   }
 
@@ -764,58 +748,12 @@ async function syncAll() {
   }
 }
 
-// Opens the chat a notification pointed to (called from the service worker)
-function openFromNotification(sender) {
-  const who = validUsername(sender);
-  if (!who || !state.token) return;
-  if (who !== state.chatWith) openChat(who);
-}
+// ---------- 9. PWA INSTALL ----------
 
-// ---------- 9. EVENTS & START ----------
-
-$('auth-form').addEventListener('submit', e => {
-  e.preventDefault();
-  authenticate(false);
-});
-$('signup-btn').addEventListener('click', () => authenticate(true));
-$('logout-btn').addEventListener('click', logOut);
-$('notif-btn').addEventListener('click', requestNotificationPermission);
-$('user-search').addEventListener('input', onSearchInput);
-$('back-btn').addEventListener('click', closeChat);
-$('chat-form').addEventListener('submit', sendMessage);
-$('attach-btn').addEventListener('click', () => $('file-input').click());
-$('file-input').addEventListener('change', onFileChosen);
-$('pending-clear').addEventListener('click', clearPending);
-
-// When you come back to the tab, catch up on anything missed
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) syncAll();
-});
-
-window.addEventListener('online', () => {
-  updateOnlineStatus();
-  syncAll();
-});
-window.addEventListener('offline', updateOnlineStatus);
-
-// --- SERVICE WORKER ---
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('./sw.js')
-      .catch(err => console.error('ServiceWorker registration failed:', err));
-  });
-  navigator.serviceWorker.addEventListener('message', event => {
-    if (event.data?.type === 'OPEN_CHAT') openFromNotification(event.data.sender);
-  });
-}
-
-// --- PWA INSTALL ---
-let deferredPrompt = null;
 const installBtns = document.querySelectorAll('.pwa-install-btn');
 
 function showInstallButtons() {
-  if (IS_STANDALONE) return; // already installed, nothing to offer
+  if (IS_STANDALONE) return; // already installed
   installBtns.forEach(b => b.classList.remove('hidden'));
 }
 
@@ -823,7 +761,7 @@ function hideInstallButtons() {
   installBtns.forEach(b => b.classList.add('hidden'));
 }
 
-// Platform-specific steps for browsers that cannot show the install prompt
+// Platform-specific steps for browsers that can't show the install prompt
 function installGuide() {
   const ua = navigator.userAgent;
   const isIOSSafari = IS_IOS && /safari/i.test(ua) && !/crios|fxios|edgios|opios|gsa/i.test(ua);
@@ -832,12 +770,12 @@ function installGuide() {
   if (IS_IOS && !isIOSSafari) {
     return {
       title: 'Open in Safari',
-      intro: 'iPhone only lets Safari add apps to your Home Screen. Copy this page\'s address and open it in Safari first.',
+      intro: "iPhone only lets Safari add apps to your Home Screen. Copy this page's address and open it in Safari first.",
       steps: [
         'Open Safari and paste the address.',
         'Tap the Share button (square with an arrow) at the bottom.',
         'Tap "Add to Home Screen", then "Add".',
-        'Open Wave from your Home Screen and tap "Enable alerts".',
+        'Open Wave from your Home Screen and sign in.',
       ],
     };
   }
@@ -845,12 +783,12 @@ function installGuide() {
   if (IS_IOS) {
     return {
       title: 'Add Wave to your iPhone',
-      intro: 'Install Wave so it opens like an app and can send you alerts.',
+      intro: 'Install Wave so it opens like an app.',
       steps: [
         'Tap the Share button (square with an arrow) at the bottom of Safari.',
         'Scroll down and tap "Add to Home Screen".',
         'Tap "Add" in the top-right corner.',
-        'Open Wave from your Home Screen and tap "Enable alerts".',
+        'Open Wave from your Home Screen and sign in.',
       ],
     };
   }
@@ -862,7 +800,7 @@ function installGuide() {
       steps: [
         'Tap the browser menu (⋮ or ☰).',
         'Tap "Install app" or "Add to Home screen".',
-        'Confirm, then open Wave from your Home Screen and tap "Enable alerts".',
+        'Confirm, then open Wave from your Home Screen.',
       ],
     };
   }
@@ -910,6 +848,53 @@ async function handleInstallClick() {
   }
 }
 
+// ---------- 10. EVENTS & START ----------
+
+$('auth-form').addEventListener('submit', e => {
+  e.preventDefault();
+  authenticate(false);
+});
+$('signup-btn').addEventListener('click', () => authenticate(true));
+$('logout-btn').addEventListener('click', logOut);
+
+$('email-btn').addEventListener('click', openEmailSettings);
+$('email-form').addEventListener('submit', saveEmailSettings);
+$('email-cancel').addEventListener('click', closeEmailSettings);
+$('email-modal').addEventListener('click', e => {
+  if (e.target.id === 'email-modal') closeEmailSettings(); // tap outside the card
+});
+
+$('user-search').addEventListener('input', onSearchInput);
+$('back-btn').addEventListener('click', closeChat);
+$('chat-form').addEventListener('submit', sendMessage);
+$('attach-btn').addEventListener('click', () => $('file-input').click());
+$('file-input').addEventListener('change', onFileChosen);
+$('pending-clear').addEventListener('click', clearPending);
+
+installBtns.forEach(btn => btn.addEventListener('click', handleInstallClick));
+$('install-close').addEventListener('click', closeInstallGuide);
+$('install-modal').addEventListener('click', e => {
+  if (e.target.id === 'install-modal') closeInstallGuide();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeInstallGuide();
+    closeEmailSettings();
+  }
+});
+
+// Catch up on anything missed when the user comes back to the app
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) syncAll();
+});
+
+window.addEventListener('online', () => {
+  updateOnlineStatus();
+  syncAll();
+});
+window.addEventListener('offline', updateOnlineStatus);
+
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
@@ -921,17 +906,15 @@ window.addEventListener('appinstalled', () => {
   hideInstallButtons();
 });
 
-installBtns.forEach(btn => btn.addEventListener('click', handleInstallClick));
-$('install-close').addEventListener('click', closeInstallGuide);
-$('install-modal').addEventListener('click', e => {
-  if (e.target.id === 'install-modal') closeInstallGuide(); // tap outside the card
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeInstallGuide();
-});
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('./sw.js')
+      .catch(err => console.error('ServiceWorker registration failed:', err));
+  });
+}
 
-showInstallButtons(); // visible on every platform; iPhone and others get the guide
-
-// --- START ---
+// Start (keep these last, after every declaration above)
+showInstallButtons();
 updateOnlineStatus();
 restoreSession();
