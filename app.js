@@ -5,6 +5,7 @@
 // ---------- 1. SETUP ----------
 const SUPABASE_URL = 'https://tjzjgspoufiklfmeeakn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NFLiqvcxlRXLMmvXHxw8Aw_XA49khDj';
+const DELETE_ACCOUNT_URL = `${SUPABASE_URL}/functions/v1/delete-account`;
 
 if (!window.supabase?.createClient) {
   document.getElementById('boot').textContent =
@@ -43,23 +44,25 @@ const IS_STANDALONE =
   window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 const state = {
-  token: null,         // session token (proves who you are to the server)
-  me: null,            // your username
-  chatWith: null,      // username of the open conversation
-  lastId: 0,           // newest message id shown in the open chat
-  seenIds: new Set(),  // message ids already on screen (prevents duplicates)
-  lastDay: null,       // used for "Today / Yesterday" separators
-  unread: new Set(),   // usernames with unseen messages (green dot)
-  inbox: null,         // realtime channel
+  token: null,          // session token (proves who you are to the server)
+  me: null,             // your username
+  chatWith: null,       // username of the open conversation
+  lastId: 0,            // newest message id shown in the open chat
+  seenIds: new Set(),   // message ids already on screen (prevents duplicates)
+  lastDay: null,        // used for "Today / Yesterday" separators
+  unread: new Set(),    // usernames with unseen messages (green dot)
+  inbox: null,          // realtime channel
   sending: false,
-  pendingFile: null,   // file chosen but not yet sent: { file, type }
+  pendingFile: null,    // file chosen but not yet sent: { file, type }
+  emailRequired: false, // true while the user must save an alert email before chatting
 };
 
-let listSeq = 0;        // ignores out-of-date contact list results
+let listSeq = 0;          // ignores out-of-date contact list results
 let searchTimer = null;
-let pendingChat = null; // chat to open after sign-in (set when opened from an email link)
+let pendingChat = null;   // chat to open after sign-in (set when opened from an email link)
 let toastTimer = null;
 let deferredPrompt = null; // browser install prompt, when the browser offers one
+let deleting = false;      // true while a delete-account request is in progress
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -109,6 +112,7 @@ function setSendBusy(busy) {
   $('send-btn').textContent = busy ? 'Sending…' : 'Send';
 }
 
+// Shows one screen by name. Pass 'none' to hide all of them.
 function showScreen(name) {
   ['auth', 'contacts', 'chat'].forEach(s => $(`${s}-screen`).classList.toggle('hidden', s !== name));
 }
@@ -197,13 +201,25 @@ function playNotifSound() {
   audio.play().catch(() => {}); // browsers may block sound until the user has interacted
 }
 
-// ---------- 2c. EMAIL ALERTS SETTINGS ----------
+// ---------- 2c. EMAIL ALERTS ----------
 
-async function openEmailSettings() {
-  const input = $('email-input');
-  input.value = '';
+// Shows the email form. In required mode it can't be closed until an email is saved.
+function showEmailForm(required) {
+  state.emailRequired = required;
+  $('email-title').textContent = required ? 'Add your email' : 'Email alerts';
+  $('email-intro').textContent = required
+    ? 'To get notified when new messages arrive, add your email address. We will email you when someone messages you while Wave is closed. You can change this later in Email alerts.'
+    : 'Get an email when someone messages you while Wave is closed. Your address is used only for these alerts. Leave it empty to turn them off.';
+  $('email-cancel').classList.toggle('hidden', required);
+  $('email-logout').classList.toggle('hidden', !required);
   $('email-error').textContent = '';
   $('email-modal').classList.remove('hidden');
+}
+
+async function openEmailSettings() {
+  showEmailForm(false);
+  const input = $('email-input');
+  input.value = '';
   try {
     input.value = (await rpc('get_notify_email', { p_token: state.token })) ?? '';
   } catch (err) {
@@ -213,12 +229,19 @@ async function openEmailSettings() {
 }
 
 function closeEmailSettings() {
+  if (state.emailRequired) return; // can't skip while an email is required
   $('email-modal').classList.add('hidden');
 }
 
 async function saveEmailSettings(event) {
   event.preventDefault();
   const email = $('email-input').value.trim().toLowerCase();
+  const required = state.emailRequired;
+
+  if (!email && required) {
+    $('email-error').textContent = 'Please enter your email address to continue.';
+    return;
+  }
   if (email && !EMAIL_RE.test(email)) {
     $('email-error').textContent = 'Please enter a valid email address.';
     return;
@@ -229,13 +252,71 @@ async function saveEmailSettings(event) {
   $('email-error').textContent = '';
   try {
     await rpc('set_notify_email', { p_token: state.token, p_email: email });
-    closeEmailSettings();
+    state.emailRequired = false;
+    $('email-modal').classList.add('hidden');
     toast(email ? 'Email alerts are on.' : 'Email alerts are off.');
+    if (required) startApp(); // the email is saved, so the chats can open now
   } catch (err) {
     if (err instanceof SessionExpiredError) return handleError(err);
     $('email-error').textContent = err.message;
   } finally {
     btn.disabled = false;
+  }
+}
+
+// ---------- 2d. DELETE ACCOUNT ----------
+
+function openDeleteAccount() {
+  $('delete-password').value = '';
+  $('delete-error').textContent = '';
+  $('delete-modal').classList.remove('hidden');
+  $('delete-password').focus();
+}
+
+function closeDeleteAccount() {
+  if (!deleting) $('delete-modal').classList.add('hidden');
+}
+
+async function deleteAccount(event) {
+  event.preventDefault();
+  const password = $('delete-password').value;
+  if (!password) {
+    $('delete-error').textContent = 'Please enter your password.';
+    return;
+  }
+
+  deleting = true;
+  $('delete-confirm').disabled = true;
+  $('delete-confirm').textContent = 'Deleting…';
+  $('delete-error').textContent = '';
+
+  try {
+    const res = await fetch(DELETE_ACCOUNT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify({ token: state.token, password }),
+    });
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (/session has expired/i.test(body.error || '')) {
+        deleting = false;
+        $('delete-modal').classList.add('hidden');
+        return forceLogout('Your session has expired. Please log in again.');
+      }
+      throw new Error(body.error || 'Could not delete your account. Please try again.');
+    }
+
+    deleting = false;
+    $('delete-modal').classList.add('hidden');
+    forceLogout('Your account has been deleted.');
+  } catch (err) {
+    $('delete-error').textContent =
+      /failed to fetch/i.test(err.message) ? 'Network error. Please check your connection.' : err.message;
+  } finally {
+    deleting = false;
+    $('delete-confirm').disabled = false;
+    $('delete-confirm').textContent = 'Delete forever';
   }
 }
 
@@ -265,7 +346,7 @@ async function authenticate(isSignUp) {
     state.me = username;
     $('username').value = '';
     $('password').value = '';
-    enterApp();
+    await enterApp();
   } catch (err) {
     setAuthError(err.message);
   } finally {
@@ -298,14 +379,18 @@ function forceLogout(message = '') {
     lastDay: null,
     unread: new Set(),
     sending: false,
+    emailRequired: false,
   });
+  deleting = false;
   clearPending();
-  closeEmailSettings();
+  $('email-modal').classList.add('hidden');
+  $('delete-modal').classList.add('hidden');
   $('messages').innerHTML = '';
   $('contacts-list').innerHTML = '';
   $('user-search').value = '';
   $('password').value = '';
   $('email-input').value = '';
+  $('delete-password').value = '';
   $('me-name').textContent = '';
   setAuthError(message);
   showAuth();
@@ -331,12 +416,35 @@ function restoreSession() {
   }
 }
 
-function enterApp() {
+// Runs after sign-in or when a saved session is restored. The chats only open
+// once the user has an alert email saved.
+async function enterApp() {
   $('me-name').textContent = `Signed in as ${state.me}`;
+
+  let email;
+  try {
+    email = await rpc('get_notify_email', { p_token: state.token });
+  } catch (err) {
+    if (err instanceof SessionExpiredError) return handleError(err);
+    showAuth();
+    setAuthError('Could not reach Wave. Check your connection, then refresh the page.');
+    return;
+  }
+
+  if (!email) {
+    showScreen('none');
+    showEmailForm(true);
+    return;
+  }
+  startApp();
+}
+
+function startApp() {
   showScreen('contacts');
   connectInbox();
   syncAll();
 
+  // Opening a chat from an email link, once signed in
   if (pendingChat) {
     const who = pendingChat;
     pendingChat = null;
@@ -739,7 +847,7 @@ async function onNewMessageSignal(signal) {
 
 // Refreshes everything that may have changed while the app was idle or offline
 async function syncAll() {
-  if (!state.token) return;
+  if (!state.token || state.emailRequired) return;
   try {
     await loadContacts();
     if (state.chatWith) await loadMessages();
@@ -860,8 +968,16 @@ $('logout-btn').addEventListener('click', logOut);
 $('email-btn').addEventListener('click', openEmailSettings);
 $('email-form').addEventListener('submit', saveEmailSettings);
 $('email-cancel').addEventListener('click', closeEmailSettings);
+$('email-logout').addEventListener('click', logOut);
 $('email-modal').addEventListener('click', e => {
   if (e.target.id === 'email-modal') closeEmailSettings(); // tap outside the card
+});
+
+$('delete-btn').addEventListener('click', openDeleteAccount);
+$('delete-form').addEventListener('submit', deleteAccount);
+$('delete-cancel').addEventListener('click', closeDeleteAccount);
+$('delete-modal').addEventListener('click', e => {
+  if (e.target.id === 'delete-modal') closeDeleteAccount();
 });
 
 $('user-search').addEventListener('input', onSearchInput);
@@ -881,6 +997,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeInstallGuide();
     closeEmailSettings();
+    closeDeleteAccount();
   }
 });
 
