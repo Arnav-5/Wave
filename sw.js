@@ -1,5 +1,5 @@
 // Wave Chat service worker
-const CACHE_NAME = 'wave-chat-v2'; // bump this when you change the cached files
+const CACHE_NAME = 'wave-chat-v4'; // bump this whenever a cached file changes
 
 const APP_SHELL = [
   './',
@@ -12,7 +12,7 @@ const APP_SHELL = [
   './icon-512.png',
 ];
 
-// ---- Install: cache each file separately so one missing file can't break installation
+// Cache each file separately so one missing file can't break installation
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
@@ -21,7 +21,7 @@ self.addEventListener('install', event => {
   })());
 });
 
-// ---- Activate: remove old caches and take control of open pages
+// Remove old caches and take control of open pages
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
@@ -30,11 +30,9 @@ self.addEventListener('activate', event => {
   })());
 });
 
-// ---- Fetch: network first, cache as the offline fallback (same-origin GET only)
+// Network first, cache as the offline fallback (same-origin GET requests only)
 self.addEventListener('fetch', event => {
   const req = event.request;
-
-  // Supabase (API + realtime) and CDN requests go straight to the network
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
   event.respondWith((async () => {
@@ -52,26 +50,5 @@ self.addEventListener('fetch', event => {
       if (cached) return cached;
       throw err;
     }
-  })());
-});
-
-// ---- Notification click: focus the app and open the sender's chat
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  const sender = event.notification.data?.sender || null;
-  const scope = self.registration.scope; // e.g. https://user.github.io/repo/
-
-  event.waitUntil((async () => {
-    const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const client = windows.find(c => c.url.startsWith(scope));
-
-    if (client) {
-      await client.focus();
-      if (sender) client.postMessage({ type: 'OPEN_CHAT', sender });
-      return;
-    }
-
-    const url = sender ? `${scope}?chat=${encodeURIComponent(sender)}` : scope;
-    await clients.openWindow(url);
   })());
 });
