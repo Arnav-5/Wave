@@ -432,3 +432,14 @@ button.attach:hover { background: #33343a; }
   }
   #auth-screen { height: auto; min-height: 100dvh; justify-content: center; }
 }
+
+/* ---------- Delete account ---------- */
+.account-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+button.danger { color: var(--danger); }
+button.danger:hover { background: rgba(255, 92, 92, 0.1); }
+button.danger-solid { background: var(--danger); color: #fff; }
+button.danger-solid:hover { background: #e04848; }
