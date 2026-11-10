@@ -49,7 +49,7 @@
         <strong>Chats</strong>
         <small id="me-name"></small>
       </div>
-      <button type="button" id="notif-btn" class="ghost small hidden">Enable alerts</button>
+      <button type="button" id="email-btn" class="ghost small">Email alerts</button>
       <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
       <button type="button" class="ghost" id="logout-btn">Log out</button>
     </header>
@@ -83,15 +83,7 @@
     </form>
   </section>
 
-  <!-- Shown when the device is offline -->
-  <div id="offline" class="offline hidden" role="status">
-    You're offline. Messages will sync when you reconnect.
-  </div>
-
-  <!-- Notification sound and toast -->
-  <audio id="notif-sound" src="notify.mp3" preload="auto"></audio>
-  <div id="toast" role="status" aria-live="polite"></div>
-    <!-- Install guide (shown when the browser has no native install prompt) -->
+  <!-- Install guide (shown when the browser has no native install prompt) -->
   <div id="install-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
     <div class="modal-card">
       <h3 id="install-title">Install Wave</h3>
@@ -100,6 +92,29 @@
       <button type="button" id="install-close" class="full">Got it</button>
     </div>
   </div>
+
+  <!-- Email alerts settings -->
+  <div id="email-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="email-title">
+    <form id="email-form" class="modal-card">
+      <h3 id="email-title">Email alerts</h3>
+      <p class="hint">Get an email when someone messages you while Wave is closed. Your address is used only for these alerts. Leave it empty to turn them off.</p>
+      <input id="email-input" type="email" placeholder="you@example.com"
+             autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254">
+      <p id="email-error" class="error" role="alert"></p>
+      <button type="submit" id="email-save" class="full">Save</button>
+      <button type="button" id="email-cancel" class="full secondary">Cancel</button>
+    </form>
+  </div>
+
+  <!-- Shown when the device is offline -->
+  <div id="offline" class="offline hidden" role="status">
+    You're offline. Messages will sync when you reconnect.
+  </div>
+
+  <!-- Notification sound and toast -->
+  <audio id="notif-sound" src="notify.mp3" preload="auto"></audio>
+  <div id="toast" role="status" aria-live="polite"></div>
+
   <script src="app.js"></script>
 
   <!-- If app.js never starts (for example, a script error), tell the user -->
