@@ -1,3 +1,7 @@
+/* =====================================================================
+   WAVE CHAT - style.css
+   ===================================================================== */
+
 :root {
   --bg: #111214;
   --panel: #1c1d21;
@@ -9,7 +13,7 @@
   --accent-hover: #1f66dd;
   --sent: #2f7cf6;         /* your messages: blue */
   --received: #3a3c44;     /* their messages: grey */
-  --online: #22c55e;       /* unread dot: green */
+  --online: #22c55e;       /* unread dot and install button: green */
   --danger: #ff5c5c;
 }
 
@@ -28,7 +32,15 @@ body {
   padding: 16px;
 }
 
-/* Screens */
+.boot {
+  margin: auto;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
+  padding: 24px;
+}
+
+/* ---------- Screens ---------- */
 .screen {
   width: 100%;
   max-width: 420px;
@@ -44,7 +56,7 @@ body {
 #auth-screen { height: auto; padding: 28px 24px; }
 #auth-screen h2 { margin: 0 0 12px; text-align: center; font-weight: 600; }
 
-/* Headers */
+/* ---------- Headers ---------- */
 .header {
   display: flex;
   align-items: center;
@@ -65,9 +77,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.spacer { width: 72px; flex-shrink: 0; }
 
-/* Inputs */
+/* ---------- Inputs ---------- */
 input {
   width: 100%;
   padding: 12px 14px;
@@ -82,7 +93,7 @@ input {
 }
 input:focus { border-color: var(--accent); }
 
-/* Buttons */
+/* ---------- Buttons ---------- */
 button {
   font: inherit;
   font-size: 15px;
@@ -101,8 +112,8 @@ button.secondary { background: var(--panel-2); }
 button.secondary:hover { background: #33343a; }
 button.ghost { background: transparent; color: var(--accent); padding: 8px 10px; }
 button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
+button.small { padding: 6px 10px; font-size: 13px; white-space: nowrap; }
 
-/* Install App Button */
 .install-btn {
   background: var(--accent);
   color: #fff;
@@ -113,11 +124,18 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
   margin-right: 6px;
   white-space: nowrap;
 }
-.install-btn:hover {
-  background: var(--accent-hover);
+.install-btn:hover { background: var(--accent-hover); }
+.install-full {
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  font-size: 15px;
+  background: var(--online);
+  color: #fff;
 }
+.install-full:hover { background: #1ea34e; }
 
-/* Contacts */
+/* ---------- Contacts ---------- */
 .search-wrap { padding: 12px 14px 4px; }
 .search-wrap input { margin: 0; }
 
@@ -170,7 +188,6 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
   color: var(--muted);
 }
 
-/* Green unread dot */
 .dot {
   width: 10px;
   height: 10px;
@@ -181,7 +198,7 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
 
 .empty { text-align: center; color: var(--muted); margin-top: 40px; line-height: 1.6; }
 
-/* Chat */
+/* ---------- Chat ---------- */
 #messages {
   flex: 1;
   min-height: 0;
@@ -205,8 +222,8 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
 }
 
 .msg { display: flex; flex-shrink: 0; }
-.msg.mine { justify-content: flex-end; }    /* sent: right side */
-.msg.theirs { justify-content: flex-start; } /* received: left side */
+.msg.mine { justify-content: flex-end; }
+.msg.theirs { justify-content: flex-start; }
 
 .bubble {
   max-width: 78%;
@@ -244,46 +261,6 @@ button.ghost:hover { background: rgba(255, 255, 255, 0.06); }
 }
 .composer input { flex: 1; margin: 0; }
 .composer button { flex-shrink: 0; }
-
-/* Messages and notifications */
-.error {
-  color: var(--danger);
-  font-size: 14px;
-  min-height: 1.3em;
-  margin: 10px 0 0;
-  text-align: center;
-}
-
-#toast {
-  position: fixed;
-  left: 50%;
-  top: 18px;
-  transform: translate(-50%, -8px);
-  background: #2c2d33;
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-size: 14px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s, transform 0.2s;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-  max-width: calc(100% - 32px);
-}
-#toast.show { opacity: 1; transform: translate(-50%, 0); }
-
-/* Phones: full screen */
-@media (max-width: 480px) {
-  body { padding: 0; }
-  .screen {
-    max-width: none;
-    height: 100vh;
-    height: 100dvh;
-    border: none;
-    border-radius: 0;
-  }
-  #auth-screen { height: auto; min-height: 100dvh; justify-content: center; }
-}
 
 /* ---------- Attachments ---------- */
 button.attach {
@@ -355,31 +332,14 @@ button.attach:hover { background: #33343a; }
 }
 .file-size { font-size: 11px; opacity: 0.7; }
 
-/* ============================================================
-   ADDITIONS: append to the end of your existing style.css
-   ============================================================ */
-
-.boot {
-  margin: auto;
-  color: var(--muted);
-  font-size: 15px;
+/* ---------- Messages and notices ---------- */
+.error {
+  color: var(--danger);
+  font-size: 14px;
+  min-height: 1.3em;
+  margin: 10px 0 0;
   text-align: center;
-  padding: 24px;
 }
-
-button.small {
-  padding: 6px 10px;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.install-full {
-  width: 100%;
-  margin: 0 0 16px;
-  background: var(--online);
-  color: #fff;
-}
-.install-full:hover { background: #1ea34e; }
 
 .hint {
   margin: 12px 0 0;
@@ -389,11 +349,31 @@ button.small {
   line-height: 1.5;
 }
 
+#toast {
+  position: fixed;
+  left: 50%;
+  top: 18px;
+  transform: translate(-50%, -8px);
+  z-index: 40;
+  background: #2c2d33;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  max-width: calc(100% - 32px);
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
 .offline {
   position: fixed;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
+  z-index: 20;
   width: max-content;
   max-width: calc(100% - 32px);
   background: #7a4a00;
@@ -401,18 +381,10 @@ button.small {
   padding: 8px 14px;
   border-radius: 10px;
   font-size: 13px;
-  z-index: 20;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* Keep content clear of the notch and home indicator on installed phone apps */
-@media (max-width: 480px) {
-  .screen {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-}
-/* ---------- Install guide ---------- */
+/* ---------- Modals (install guide and email alerts) ---------- */
 .modal {
   position: fixed;
   inset: 0;
@@ -445,3 +417,18 @@ button.small {
   line-height: 1.6;
 }
 .steps li { margin-bottom: 6px; }
+
+/* ---------- Phones: full screen ---------- */
+@media (max-width: 480px) {
+  body { padding: 0; }
+  .screen {
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #auth-screen { height: auto; min-height: 100dvh; justify-content: center; }
+}
