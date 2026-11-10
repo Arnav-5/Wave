@@ -1,3 +1,4 @@
+const CACHE_NAME = 'wave-chat-v5'; // bump this whenever a cached file changes
 // Wave Chat service worker
 const CACHE_NAME = 'wave-chat-v4'; // bump this whenever a cached file changes
 
@@ -50,5 +51,20 @@ self.addEventListener('fetch', event => {
       if (cached) return cached;
       throw err;
     }
+  })());
+});
+
+// Opens the right chat when the user taps a notification
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const chat = event.notification.data?.chat;
+  const url = chat ? `./?chat=${encodeURIComponent(chat)}` : './';
+  event.waitUntil((async () => {
+    const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (all.length) {
+      await all[0].focus();
+      return all[0].navigate(url).catch(() => {});
+    }
+    return clients.openWindow(url);
   })());
 });
