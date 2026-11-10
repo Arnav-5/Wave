@@ -191,7 +191,7 @@ function updateOnlineStatus() {
 }
 
 // ---------- 2b. ALERTS ----------
-// While Wave is open: a sound and an on-screen toast.
+// While Wave is open: a sound, an on-screen toast, and a system notification.
 // While Wave is closed: an email, sent by the server (see the Edge Function).
 
 function playNotifSound() {
@@ -203,13 +203,8 @@ function playNotifSound() {
 
 function showSystemNotification(body, chatWith) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const options = {
-    body,
-    icon: 'icon-192.png',
-    badge: 'icon-192.png',
-    data: { chat: chatWith },
-  };
-  if (navigator.serviceWorker?.controller) {
+  const options = { body, icon: 'icon-192.png', badge: 'icon-192.png', data: { chat: chatWith } };
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(reg => reg.showNotification('Wave', options));
   } else {
     new Notification('Wave', options);
@@ -257,6 +252,7 @@ function closeEmailSettings() {
 async function saveEmailSettings(event) {
   event.preventDefault();
   requestNotifyPermission();
+  const required = state.emailRequired;
   const email = $('email-input').value.trim().toLowerCase();
 
   if (!email && required) {
@@ -418,7 +414,7 @@ function forceLogout(message = '') {
 }
 
 // Runs on page load. Goes straight in if a session was saved, and opens
-// a chat if the page was opened from an email link (?chat=name).
+// a chat if the page was opened from an email link or notification (?chat=name).
 function restoreSession() {
   const params = new URLSearchParams(location.search);
   pendingChat = validUsername(params.get('chat'));
@@ -465,7 +461,7 @@ function startApp() {
   connectInbox();
   syncAll();
 
-  // Opening a chat from an email link, once signed in
+  // Opening a chat from an email link or notification, once signed in
   if (pendingChat) {
     const who = pendingChat;
     pendingChat = null;
@@ -539,7 +535,10 @@ function buildContact(row) {
   }
 
   btn.append(avatar, label, meta);
-  btn.addEventListener('click', () => openChat(name));
+  btn.addEventListener('click', () => {
+    requestNotifyPermission(); // a tap counts as a user action, so the browser may show the prompt
+    openChat(name);
+  });
   return btn;
 }
 
