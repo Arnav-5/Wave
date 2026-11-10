@@ -1,85 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wave..</title>
-    
-    <!-- PWA Meta tags -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1c1d21">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon-192.png">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Wave</title>
+  <meta name="description" content="Wave is a real-time, lightweight chat app.">
 
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#1c1d21">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Wave">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-   
+  <!-- Shown until app.js starts -->
+  <p id="boot" class="boot">Loading Wave…</p>
+  <noscript><p class="boot">Wave needs JavaScript to run.</p></noscript>
 
-   
-   <!-- AUTH SCREEN -->
-    <section id="auth-screen" class="screen hidden">
-        <h2>Join the Chat</h2>
-        <!-- Install Button for Auth Screen -->
-        <button type="button" class="install-btn pwa-install-btn hidden" style="width: 100%; margin-bottom: 16px; background: #22c55e;">Install App</button>
+  <!-- AUTH SCREEN -->
+  <section id="auth-screen" class="screen hidden">
+    <h2>Join the Chat</h2>
+    <button type="button" class="install-btn install-full pwa-install-btn hidden">Install App</button>
 
-        <form id="auth-form" novalidate>
-            <input id="username" type="text" placeholder="Username" autocomplete="username" maxlength="20">
-            <input id="password" type="password" placeholder="Password" autocomplete="current-password" maxlength="72">
-            <button type="submit" id="login-btn" class="full">Log in</button>
-            <button type="button" id="signup-btn" class="full secondary">Create account</button>
-        </form>
-        <p id="auth-error" class="error"></p>
-    </section>
+    <form id="auth-form" novalidate>
+      <input id="username" type="text" placeholder="Username" autocomplete="username"
+             maxlength="20" autocapitalize="none" spellcheck="false">
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password"
+             maxlength="72">
+      <button type="submit" id="login-btn" class="full">Log in</button>
+      <button type="button" id="signup-btn" class="full secondary">Create account</button>
+    </form>
+    <p id="auth-error" class="error" role="alert"></p>
+    <p id="ios-hint" class="hint hidden">On iPhone: tap Share, then Add to Home Screen, to get message alerts.</p>
+  </section>
 
-    <!-- CONTACTS SCREEN -->
-    <section id="contacts-screen" class="screen hidden">
-        <header class="header">
-            <div class="head-text">
-                <strong>Chats</strong>
-                <small id="me-name"></small>
-            </div>
-            <!-- Install Button for Contacts Screen -->
-            <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
-            <button type="button" class="ghost" id="logout-btn">Log out</button>
-        </header>
-        <div class="search-wrap">
-            <input id="user-search" type="search" placeholder="Search people" autocomplete="off">
-        </div>
-        <div id="contacts-list"></div>
-    </section>
+  <!-- CONTACTS SCREEN -->
+  <section id="contacts-screen" class="screen hidden">
+    <header class="header">
+      <div class="head-text">
+        <strong>Chats</strong>
+        <small id="me-name"></small>
+      </div>
+      <button type="button" id="notif-btn" class="ghost small hidden">Enable alerts</button>
+      <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
+      <button type="button" class="ghost" id="logout-btn">Log out</button>
+    </header>
+    <div class="search-wrap">
+      <input id="user-search" type="search" placeholder="Search people" autocomplete="off">
+    </div>
+    <div id="contacts-list"></div>
+  </section>
 
-    <!-- CHAT SCREEN -->
-    <section id="chat-screen" class="screen hidden">
-        <header class="header">
-            <button type="button" class="ghost" id="back-btn">‹ Back</button>
-            <div id="chat-title" class="header-title"></div>
-            <!-- Install Button for Chat Interface -->
-            <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
-        </header>
-        <div id="messages"></div>
+  <!-- CHAT SCREEN -->
+  <section id="chat-screen" class="screen hidden">
+    <header class="header">
+      <button type="button" class="ghost" id="back-btn">‹ Back</button>
+      <div id="chat-title" class="header-title"></div>
+      <button type="button" class="install-btn pwa-install-btn hidden">Install App</button>
+    </header>
+    <div id="messages"></div>
 
-        <div id="pending" class="pending hidden">
-            <span id="pending-name"></span>
-            <button type="button" class="ghost" id="pending-clear" aria-label="Remove file">✕</button>
-        </div>
+    <div id="pending" class="pending hidden">
+      <span id="pending-name"></span>
+      <button type="button" class="ghost" id="pending-clear" aria-label="Remove file">✕</button>
+    </div>
 
-        <form id="chat-form" class="composer" autocomplete="off">
-            <button type="button" class="attach" id="attach-btn" aria-label="Attach file">📎</button>
-            <input id="file-input" type="file" hidden
-                   accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
-            <input id="message-input" type="text" placeholder="Message" maxlength="1000">
-            <button type="submit" id="send-btn">Send</button>
-        </form>
-    </section>
+    <form id="chat-form" class="composer" autocomplete="off">
+      <button type="button" class="attach" id="attach-btn" aria-label="Attach file">📎</button>
+      <input id="file-input" type="file" hidden
+             accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
+      <input id="message-input" type="text" placeholder="Message" maxlength="1000"
+             aria-label="Message" enterkeyhint="send">
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </section>
 
-    <!-- Notification Sound -->
-    <audio id="notif-sound" src="notify.mp3" preload="auto"></audio>
-    <div id="toast"></div>
+  <!-- Shown when the device is offline -->
+  <div id="offline" class="offline hidden" role="status">
+    You're offline. Messages will sync when you reconnect.
+  </div>
 
-    <script src="app.js"></script>
+  <!-- Notification sound and toast -->
+  <audio id="notif-sound" src="notify.mp3" preload="auto"></audio>
+  <div id="toast" role="status" aria-live="polite"></div>
+    <!-- Install guide (shown when the browser has no native install prompt) -->
+  <div id="install-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="modal-card">
+      <h3 id="install-title">Install Wave</h3>
+      <p id="install-intro"></p>
+      <ol id="install-steps" class="steps"></ol>
+      <button type="button" id="install-close" class="full">Got it</button>
+    </div>
+  </div>
+  <script src="app.js"></script>
+
+  <!-- If app.js never starts (for example, a script error), tell the user -->
+  <script>
+    setTimeout(() => {
+      const boot = document.getElementById('boot');
+      if (boot) boot.textContent = 'Wave is taking too long to start. Check your connection, then refresh.';
+    }, 10000);
+  </script>
 </body>
 </html>
