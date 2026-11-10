@@ -201,6 +201,27 @@ function playNotifSound() {
   audio.play().catch(() => {}); // browsers may block sound until the user has interacted
 }
 
+function showSystemNotification(body, chatWith) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const options = {
+    body,
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+    data: { chat: chatWith },
+  };
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.ready.then(reg => reg.showNotification('Wave', options));
+  } else {
+    new Notification('Wave', options);
+  }
+}
+
+// Asks for permission once. Browsers only show the prompt from a user action.
+function requestNotifyPermission() {
+  if (!('Notification' in window) || Notification.permission !== 'default') return;
+  Notification.requestPermission();
+}
+
 // ---------- 2c. EMAIL ALERTS ----------
 
 // Shows the email form. In required mode it can't be closed until an email is saved.
@@ -235,8 +256,8 @@ function closeEmailSettings() {
 
 async function saveEmailSettings(event) {
   event.preventDefault();
+  requestNotifyPermission();
   const email = $('email-input').value.trim().toLowerCase();
-  const required = state.emailRequired;
 
   if (!email && required) {
     $('email-error').textContent = 'Please enter your email address to continue.';
@@ -835,9 +856,11 @@ async function onNewMessageSignal(signal) {
   if (incoming && !viewing) {
     toast(`New message from ${other}`);
     playNotifSound();
+    showSystemNotification(`New message from ${other}`, other);
   }
 
-  if (other === state.chatWith) {
+  // Only mark as read when the chat is actually on screen
+  if (other === state.chatWith && !document.hidden) {
     await sleep(150); // give the database a moment to commit
     await loadMessages().catch(handleError);
   }
