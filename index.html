@@ -57,6 +57,9 @@
       <input id="user-search" type="search" placeholder="Search people" autocomplete="off">
     </div>
     <div id="contacts-list"></div>
+    <footer class="account-footer">
+      <button type="button" id="delete-btn" class="ghost danger">Delete my account</button>
+    </footer>
   </section>
 
   <!-- CHAT SCREEN -->
@@ -93,18 +96,32 @@
     </div>
   </div>
 
-  <!-- Email alerts settings -->
-  <div id="email-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="email-title">
-    <form id="email-form" class="modal-card">
-      <h3 id="email-title">Email alerts</h3>
-      <p class="hint">Get an email when someone messages you while Wave is closed. Your address is used only for these alerts. Leave it empty to turn them off.</p>
-      <input id="email-input" type="email" placeholder="you@example.com"
-             autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254">
-      <p id="email-error" class="error" role="alert"></p>
-      <button type="submit" id="email-save" class="full">Save</button>
-      <button type="button" id="email-cancel" class="full secondary">Cancel</button>
-    </form>
-  </div>
+  <!-- Email alerts settings (required on first sign-in) -->
+<div id="email-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="email-title">
+  <form id="email-form" class="modal-card">
+    <h3 id="email-title">Email alerts</h3>
+    <p id="email-intro" class="hint"></p>
+    <input id="email-input" type="email" placeholder="you@example.com"
+           autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254">
+    <p id="email-error" class="error" role="alert"></p>
+    <button type="submit" id="email-save" class="full">Save</button>
+    <button type="button" id="email-cancel" class="full secondary">Cancel</button>
+    <button type="button" id="email-logout" class="full secondary hidden">Log out</button>
+  </form>
+</div>
+
+  <!-- Delete account confirmation -->
+<div id="delete-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+  <form id="delete-form" class="modal-card">
+    <h3 id="delete-title">Delete your account?</h3>
+    <p class="hint">This permanently deletes your account, your messages (including chats with other people), and your uploaded files. This cannot be undone.</p>
+    <input id="delete-password" type="password" placeholder="Enter your password to confirm"
+           autocomplete="current-password" maxlength="72">
+    <p id="delete-error" class="error" role="alert"></p>
+    <button type="submit" id="delete-confirm" class="full danger-solid">Delete forever</button>
+    <button type="button" id="delete-cancel" class="full secondary">Cancel</button>
+  </form>
+</div>
 
   <!-- Shown when the device is offline -->
   <div id="offline" class="offline hidden" role="status">
