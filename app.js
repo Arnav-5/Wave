@@ -810,36 +810,127 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// --- PWA INSTALL PROMPT ---
+// --- PWA INSTALL ---
 let deferredPrompt = null;
 const installBtns = document.querySelectorAll('.pwa-install-btn');
+
+function showInstallButtons() {
+  if (IS_STANDALONE) return; // already installed, nothing to offer
+  installBtns.forEach(b => b.classList.remove('hidden'));
+}
 
 function hideInstallButtons() {
   installBtns.forEach(b => b.classList.add('hidden'));
 }
 
+// Platform-specific steps for browsers that cannot show the install prompt
+function installGuide() {
+  const ua = navigator.userAgent;
+  const isIOSSafari = IS_IOS && /safari/i.test(ua) && !/crios|fxios|edgios|opios|gsa/i.test(ua);
+  const isAndroid = /android/i.test(ua);
+
+  if (IS_IOS && !isIOSSafari) {
+    return {
+      title: 'Open in Safari',
+      intro: 'iPhone only lets Safari add apps to your Home Screen. Copy this page\'s address and open it in Safari first.',
+      steps: [
+        'Open Safari and paste the address.',
+        'Tap the Share button (square with an arrow) at the bottom.',
+        'Tap "Add to Home Screen", then "Add".',
+        'Open Wave from your Home Screen and tap "Enable alerts".',
+      ],
+    };
+  }
+
+  if (IS_IOS) {
+    return {
+      title: 'Add Wave to your iPhone',
+      intro: 'Install Wave so it opens like an app and can send you alerts.',
+      steps: [
+        'Tap the Share button (square with an arrow) at the bottom of Safari.',
+        'Scroll down and tap "Add to Home Screen".',
+        'Tap "Add" in the top-right corner.',
+        'Open Wave from your Home Screen and tap "Enable alerts".',
+      ],
+    };
+  }
+
+  if (isAndroid) {
+    return {
+      title: 'Add Wave to your phone',
+      intro: 'Your browser did not offer an install prompt, so you can add Wave from its menu.',
+      steps: [
+        'Tap the browser menu (⋮ or ☰).',
+        'Tap "Install app" or "Add to Home screen".',
+        'Confirm, then open Wave from your Home Screen and tap "Enable alerts".',
+      ],
+    };
+  }
+
+  return {
+    title: 'Install Wave',
+    intro: 'Look for the install icon in the address bar, or open the browser menu and choose "Install Wave".',
+    steps: [],
+  };
+}
+
+function openInstallGuide() {
+  const guide = installGuide();
+  $('install-title').textContent = guide.title;
+  $('install-intro').textContent = guide.intro;
+
+  const list = $('install-steps');
+  list.innerHTML = '';
+  guide.steps.forEach(text => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    list.appendChild(li);
+  });
+
+  $('install-modal').classList.remove('hidden');
+  $('install-close').focus();
+}
+
+function closeInstallGuide() {
+  $('install-modal').classList.add('hidden');
+}
+
+// Native prompt when the browser offers one, otherwise the instructions
+async function handleInstallClick() {
+  if (!deferredPrompt) {
+    openInstallGuide();
+    return;
+  }
+  deferredPrompt.prompt();
+  try {
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') hideInstallButtons();
+  } finally {
+    deferredPrompt = null;
+  }
+}
+
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
-  installBtns.forEach(b => b.classList.remove('hidden'));
-});
-
-installBtns.forEach(btn => {
-  btn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') hideInstallButtons();
-    deferredPrompt = null;
-  });
+  showInstallButtons();
 });
 
 window.addEventListener('appinstalled', () => {
-  hideInstallButtons();
   deferredPrompt = null;
+  hideInstallButtons();
 });
 
-if (IS_STANDALONE) hideInstallButtons(); // already installed
+installBtns.forEach(btn => btn.addEventListener('click', handleInstallClick));
+$('install-close').addEventListener('click', closeInstallGuide);
+$('install-modal').addEventListener('click', e => {
+  if (e.target.id === 'install-modal') closeInstallGuide(); // tap outside the card
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeInstallGuide();
+});
+
+showInstallButtons(); // visible on every platform; iPhone and others get the guide
 
 // --- START ---
 updateOnlineStatus();
