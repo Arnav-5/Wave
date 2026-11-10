@@ -173,15 +173,23 @@ async function requestNotificationPermission() {
   }
 }
 
-function sendSystemNotification(sender, messageText) {
+async function sendSystemNotification(sender, messageText) {
   playNotifSound();
-  if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'SHOW_NOTIFICATION',
-      title: `New message from ${sender}`,
-      body: messageText || 'Sent an attachment',
-      icon: 'icon-192.png'
-    });
+  
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      // Use .ready to ensure it works even on first load
+      const reg = await navigator.serviceWorker.ready;
+      reg.showNotification(`New message from ${sender}`, {
+        body: messageText || 'Sent an attachment',
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        vibrate: [200, 100, 200],
+        data: { url: './' }
+      });
+    } catch (err) {
+      console.error('Notification error:', err);
+    }
   }
 }
 
@@ -331,6 +339,17 @@ function buildContact(row) {
     dot.setAttribute('aria-label', 'New message');
     meta.appendChild(dot);
   }
+
+  btn.append(avatar, label, meta);
+  
+  // FIX: Request permission only when the user physically taps a contact
+  btn.addEventListener('click', () => {
+    requestNotificationPermission();
+    openChat(name);
+  });
+  
+  return btn;
+}
 
   btn.append(avatar, label, meta);
   btn.addEventListener('click', () => openChat(name));
@@ -630,19 +649,21 @@ async function onNewMessageSignal(signal) {
 
   const other = data.sender === state.me ? data.receiver : data.sender;
 
-  if (other === state.chatWith) {
-    await sleep(150); // brief pause so the new row is committed before we read it
-    await loadMessages().catch(handleError); // also marks it as seen
-  } else if (data.receiver === state.me) {
-    toast(`New message from ${other}`);
-    sendSystemNotification(other, data.content || 'New message');
+  // If the message is for me, and (I am not looking at the chat OR the app is in the background)
+  if (data.receiver === state.me) {
+    if (other !== state.chatWith || document.hidden) {
+      toast(`New message from ${other}`);
+      sendSystemNotification(other, data.content || 'New message');
+    }
   }
-  loadContacts().catch(handleError);
-}
 
-function syncAll() {
+  // Load the message onto the screen if we are looking at this chat
+  if (other === state.chatWith) {
+    await sleep(150); 
+    await loadMessages().catch(handleError); 
+  }
+  
   loadContacts().catch(handleError);
-  if (state.chatWith) loadMessages().catch(handleError);
 }
 
 // ---------- 9. EVENTS, START & PWA ----------
